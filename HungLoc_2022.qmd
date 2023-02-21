@@ -268,19 +268,146 @@ for (i in 1:length(trait_wanted)) {
 ```
 ## Save the tidy data for analysis
 
+```{r eval=FALSE}
+write.csv(trial_tidy, , paste("01_", year_interest, trial_interest,
+  "_tidy_data4analysis_", Sys.Date(), ".csv", sep = ""), row.names = FALSE)
+```
+
+# Statistical data analysis
+
+## master_data to save the results
+
 ```{r}
-write.csv(trial_tidy, here::here("output", paste("01_", year_interest, trial_interest,
-  "_tidy_data4analysis_", Sys.Date(), ".csv",
-  sep = ""
-)),
-row.names = FALSE
-)
+master_data <- list()
 ```
 
 
+## Load the tidy data
+
+```{r}
+trial_set_number = 1
+
+# all files in the folder
+list_file = list.files(here::here("output"))
+# tidy data of the trials interested
+sel_file = list_file[str_detect(list_file, "_tidy_data4analysis_") &
+                       str_detect(list_file,
+                                  paste(year_interest, trial_interest, sep=""))]
+sel_file
+# the data we will use
+sel_file_use = sel_file[1]
+
+trial1_tidy = read.csv(here::here("output", sel_file_use), header=TRUE,
+                        stringsAsFactors = FALSE,
+                        as.is=T,
+                        check.names = FALSE)
+
+if(trial_set_number == 1){
+  trial_tidy_all = trial1_tidy
+}
+
+```
+
+## Obtain all the trait information using a cloud file (gitHub) -------
+
+```{r}
+trait_all <-
+  read.csv("https://raw.githubusercontent.com/lfdelgadom/standar_col_names_CB/main/standar_col_names.csv") %>%
+  select(analysis_col_name) %>%
+  filter(str_detect(analysis_col_name, "obs_"))
+trait_all_adj <- gsub("obs_", "", trait_all$analysis_col_name)
+trait_all_adj = c(trait_all_adj,
+                  "harvest_number_plan", "germination_perc",
+                  "yield_ha_v2", "starch_yield_ha")
+trait_all_adj <- gsub("-", "_", trait_all_adj)
+```
+
+## Meta info.
+
+```{r}
+meta_all <-
+  read.csv("https://raw.githubusercontent.com/lfdelgadom/standar_col_names_CB/main/standar_col_names.csv") %>%
+  select(analysis_col_name) %>%
+  filter(str_detect(analysis_col_name, "use_"))
+meta_all_adj <- gsub("use_", "", meta_all$analysis_col_name)
+meta_all_adj <- c(
+  meta_all_adj,
+  "check_released", "latitude", "longitude",
+  "altitude", "department", "country",
+  "ag_zone", "location_short"
+)
+```
+
+## Select the observations for analysis
+
+```{r}
+names(trial_tidy_all) <- gsub("-", "_", names(trial_tidy_all))
+analysis_trait_v1 <- names(trial_tidy_all)[names(trial_tidy_all) %in% trait_all_adj]
+print("All the traits investigated:")
+print(analysis_trait_v1)
+```
 
 
+## Select the meta information for analysis
 
+```{r}
+meta_col <- names(trial_tidy_all)[names(trial_tidy_all) %in% meta_all_adj]
+print("All the meta information:")
+print(meta_col)
+```
+
+## Check the SD of each trait
+
+```{r}
+my_dat = trial_tidy_all 
+analysis_trait = analysis_trait_v1
+meta_info = meta_col
+
+remove_no_var_tidy(my_dat)
+master_data[["mean_of_sd"]] = sd_mean[order(sd_mean$mean_of_sd),]
+```
+
+## Trait ideal
+
+```{r}
+trait_ideal <- analysis_trait[-c(1, 9, 10, 11, 12, 16:26)]
+```
+
+
+## Summary tables
+
+```{r}
+i <- 1
+for (var in trait_ideal) {
+  # summary tables
+  summ <- my_dat %>%
+    distinct(trial_name, plot_name, rep_number, accession_name, .data[[var]]) %>%
+    group_by(trial_name) %>%
+    summarise(
+      n_gen = n_distinct(accession_name),
+      n_reps = n_distinct(rep_number),
+      n_total = n(),
+      n_missing = sum(is.na(.data[[var]])),
+      n_percent = n_missing / n_total,
+      zeros = sum(.data[[var]] == 0, na.rm = TRUE),
+      rcbd = ifelse(n_reps > 1, TRUE, FALSE),
+      design = ifelse(n_reps == 1, "unrep", design)
+    ) %>%
+    type.convert() %>%
+    arrange(n_gen)
+  summ <- summ %>%
+    as.data.frame() %>%
+    mutate(trait = var) %>%
+    print(n = Inf)
+  if (i == 1) {
+    resum_tables <- summ
+  } else {
+    resum_tables <- rbind.data.frame(resum_tables, summ)
+  }
+  i <- i + 1
+  master_data[[paste0("summary_", trial_interest)]] <- resum_tables
+}
+```
 
 
 
