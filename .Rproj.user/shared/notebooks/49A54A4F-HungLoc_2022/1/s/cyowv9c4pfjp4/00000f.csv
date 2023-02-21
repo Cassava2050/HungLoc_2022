@@ -1,0 +1,7 @@
+"0","# ---- Change columns into standar names ----
+sel_data_kp <- change_colname(sel_data, NA)
+"
+"1","[1]"
+"1"," ""Good, the column names are standardized names now!"""
+"1","
+"

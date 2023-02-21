@@ -1,0 +1,12 @@
+"0","trial_standard_new <-
+  trial_standard_new %>%
+  dplyr::rename(""obs_starch_content"" = obs_DM_gravity) %>%
+  mutate(obs_starch_yield_ha = obs_starch_content * obs_yield_ha_v2 / 100)
+"
+"1","[1m[33mError[39m in `dplyr::rename()`:[22m
+[33m![39m Can't rename columns that don't exist.
+[31m✖[39m Column `obs_DM_gravity` doesn't exist.
+Backtrace:
+[90m 1. [39m... %>% ...
+[90m 4. [39m[1m[94mdplyr:::rename.data.frame([39m[22m., obs_starch_content = obs_DM_gravity[1m[94m)[39m[22m
+"

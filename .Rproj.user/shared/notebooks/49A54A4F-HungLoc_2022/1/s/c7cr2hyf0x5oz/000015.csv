@@ -1,0 +1,11 @@
+"0","write.csv(trial_tidy, here::here(""output"", paste(""01_"", year_interest, trial_interest,
+  ""_tidy_data4analysis_"", Sys.Date(), "".csv"",
+  sep = """"
+)),
+row.names = FALSE
+)
+"
+"2","Warning: cannot open file 'D:/OneDrive - CGIAR/Data Analysis/HungLoc_2022/output/01_2022DMF1C_tidy_data4analysis_2023-02-21.csv': No such file or directory"
+"2","Error in file(file, ifelse(append, ""a"", ""w"")) : 
+  cannot open the connection
+"

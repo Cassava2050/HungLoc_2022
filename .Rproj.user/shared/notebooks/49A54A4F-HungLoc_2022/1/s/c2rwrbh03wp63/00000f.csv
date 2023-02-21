@@ -1,0 +1,7 @@
+"0","# 1) load the data
+sel_data <- read_cassavabase(phenotypeFile = paste0(folder, file))
+"
+"1","[1]"
+"1"," ""Here are the trials and the study interested is DMF1C"""
+"1","
+"
