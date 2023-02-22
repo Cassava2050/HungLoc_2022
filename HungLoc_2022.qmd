@@ -20,7 +20,7 @@ The localities were:
 ```{r}
 rm(list = ls())
 library(pacman)
-pacman::p_load(tidyverse, fauxnaif, readxl, yarrr, dplyr, knitr, rmarkdown, statgenSTA, statgenGxE, openxlsx, QBMS, magrittr, agriutilities, asreml)
+pacman::p_load(tidyverse, fauxnaif, readxl, yarrr, dplyr, knitr, rmarkdown, statgenSTA, statgenGxE, openxlsx, QBMS, magrittr, agriutilities, asreml, SpATS)
 source("https://raw.githubusercontent.com/Cassava2050/PPD/main/utilities_tidy.R")
 ```
 
@@ -196,7 +196,10 @@ trial_standard_new <-
     obs_branch_number =
       coalesce(obs_branch_number, obs_branch_number_9mon)
   ) %>%
-  select(-obs_branch_number_9mon) %>%
+  mutate(obs_height =
+           coalesce(obs_height, obs_height_wt_leaf)
+  ) %>% 
+  select(-c("obs_branch_number_9mon", "obs_height_wt_leaf")) %>%
   dplyr::rename("obs_starch_content" = obs_DM_gravity) %>% 
   mutate(
     obs_starch_content =
@@ -206,6 +209,7 @@ trial_standard_new <-
     obs_vigor1_5 =
       ifelse(use_plot_name %in% v, NA, obs_vigor1_5)
   )
+
 ```
 
 ## Calculate starch yield
@@ -269,8 +273,8 @@ for (i in 1:length(trait_wanted)) {
 ## Save the tidy data for analysis
 
 ```{r eval=FALSE}
-write.csv(trial_tidy, , paste("01_", year_interest, trial_interest,
-  "_tidy_data4analysis_", Sys.Date(), ".csv", sep = ""), row.names = FALSE)
+write.csv(trial_tidy, here::here("output", paste("01_", year_interest, trial_interest,
+  "_tidy_data4analysis_", Sys.Date(), ".csv", sep = "")), row.names = FALSE)
 ```
 
 # Statistical data analysis
@@ -318,7 +322,7 @@ trait_all <-
 trait_all_adj <- gsub("obs_", "", trait_all$analysis_col_name)
 trait_all_adj = c(trait_all_adj,
                   "harvest_number_plan", "germination_perc",
-                  "yield_ha_v2", "starch_yield_ha")
+                  "yield_ha_v2", "starch_yield_ha", "starch_content")
 trait_all_adj <- gsub("-", "_", trait_all_adj)
 ```
 
@@ -370,7 +374,8 @@ master_data[["mean_of_sd"]] = sd_mean[order(sd_mean$mean_of_sd),]
 ## Trait ideal
 
 ```{r}
-trait_ideal <- analysis_trait[-c(1, 9, 10, 11, 12, 16:26)]
+trait_ideal <- analysis_trait[-c(1, 10, 11, 12, 13, 16:19, 21:26)]
+print("the trait ideal is:"); trait_ideal
 ```
 
 
@@ -408,6 +413,240 @@ for (var in trait_ideal) {
   master_data[[paste0("summary_", trial_interest)]] <- resum_tables
 }
 ```
+
+# Modeling single trial
+
+## Spatial Model
+
+```{r}
+# factor
+my_dat$accession_name = as.factor(my_dat$accession_name)
+# create a factor of row and cols
+my_dat$R <- as.factor(my_dat$row_number)
+my_dat$C <- as.factor(my_dat$col_number)
+```
+
+## Set location experiment
+
+```{r}
+#loca <- "dona" # -------select one
+loca <- "tani"
+# ---------------------------------------------------
+data_location <- my_dat %>% filter(str_ends(trial_name, loca)) #"tani"
+# n segments
+ncols = length(unique(data_location$C))
+nrows = length(unique(data_location$R))
+```
+
+
+```{r warning=FALSE}
+gen = "accession_name"
+h2 <- c()
+i <- 1
+for (trait in trait_ideal[-c(11)]) {  #CMD1mon, germination_percent did nor fit for tani
+  mo_spatial <- SpATS(
+    response = trait,
+    genotype = "accession_name",
+    genotype.as.random = T,
+    fixed = NULL,
+    spatial = ~ PSANOVA(col_number,
+      row_number,
+      nseg = c(ncols, nrows),
+      degree = c(3, 3),
+      nest.div = 2
+    ),
+    random = ~ R + C,
+    data = data_location,
+    control = list(tolerance = 1e-03, monitoring = 1)
+  )
+  plot(mo_spatial)
+  var.m0 <- variogram(mo_spatial)
+  plot(var.m0)
+  ng <- length(mo_spatial$terms$geno$geno_names)
+  g.SpATS <-
+    mo_spatial$coeff[1:ng] %>%
+    data.frame(coeff = .) %>%
+    rownames_to_column(gen) %>%
+    mutate(
+      variable = trait,
+      BLUP = mo_spatial$fitted[1:ng]
+    ) %>%
+    filter(accession_name %in% data_location$accession_name) %>%
+    select(-coeff)
+
+    h2[i] <- getHeritability(mo_spatial)
+  names(h2)[i] <- trait
+  if (i == 1) {
+    pvals_table <- g.SpATS
+  } else {
+    pvals_table <- rbind.data.frame(pvals_table, g.SpATS)
+  }
+  i <- i + 1
+}
+```
+
+## Save the BLUPs
+
+```{r}
+pvals_table <- pvals_table %>%
+  group_by(variable, accession_name) %>%
+  spread(variable, value = BLUP) %>%
+  ungroup() 
+#save the BLUPs data
+master_data[[paste0("BLUPs_", loca)]] <- pvals_table
+```
+
+## Save the heritabilities for both locations
+
+```{r}
+h2 <- h2 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("trait")
+colnames(h2) <- c("var", "h2")
+h2 <- h2 %>% arrange(desc(h2))
+# save the heritability
+master_data[[paste0("h2_", loca)]] <- h2
+
+master_data$BLUPs_dona
+master_data$h2_dona
+```
+```{r}
+master_data$BLUPs_tani
+```
+
+# Multienviromental analysis
+
+```{r}
+variables <- trait_ideal[-c(11, 12)]
+h2_fa <- c()
+data_MET <- my_dat
+
+```
+
+
+```{r}
+# Loop for all the traits
+i = 1
+for (var in variables) {
+  
+  cat("\n_______________")
+  cat("\nVARIABLE:", var, "\n")
+  cat("_______________\n")
+  
+  # summary by accession
+  raw_g <- data_MET %>% 
+    group_by(accession_name) %>% 
+    summarize(mean    = mean(.data[[var]], na.rm = T),
+              std.dev = sd(.data[[var]], na.rm = T),
+              n  = n(),
+              cv      = std.dev/mean,
+              n_missing  = sum(is.na(.data[[var]])),
+              n_percent = n_missing/n , 
+              n_zero = sum(.data[[var]] == 0, na.rm = T),
+              var = var
+    ) 
+  
+  # summary by trial
+  raw_m <- data_MET %>% 
+    group_by(trial_name) %>% 
+    summarize(mean    = mean(.data[[var]], na.rm = T),
+              std.dev = sd(.data[[var]], na.rm = T),
+              n  = n(),
+              cv      = std.dev/mean,
+              n_missing  = sum(is.na(.data[[var]])),
+              n_percent = n_missing/n , 
+              n_zero = sum(.data[[var]] == 0, na.rm = T),
+              var = var
+    ) %>% 
+    arrange(desc(mean)) %>% 
+    print(n=Inf) # print full table
+  
+  exp <- raw_m %>% filter(n_percent<=0.8) %>% pull(trial_name)
+  
+  data_MET_tmp <- data_MET %>% filter(trial_name %in% exp) %>% droplevels()
+  
+  # -------------------------------------------------------------------------
+  # modelling
+  # -------------------------------------------------------------------------
+  
+  data_MET_tmp$col_f <- as.factor(data_MET_tmp$col_number)
+  data_MET_tmp$row_f <- as.factor(data_MET_tmp$row_number)
+  data_MET_tmp$trial <- as.factor(data_MET_tmp$trial_name)
+  data_MET_tmp$accession <- as.factor(data_MET_tmp$accession_name)
+  
+  # GxE Factor Analytic + Genotype as Random + row_col + ar1
+  equation_fixed <-  reformulate(c("1", "trial"), response = var)
+  
+  if(length(exp)<=2){
+    equation_rand <-  reformulate(c("fa(trial, 1):accession",
+                                   "at(trial):col_f",  
+                                   "at(trial):row_f"))
+  } else {
+    equation_rand <-  reformulate(c("fa(trial, 2):accession",
+                                   "at(trial):col_f",  
+                                   "at(trial):row_f"))
+  }
+  
+  if(i >= 2) rm(m5) # when i>= 2, please remove the model
+  m5 <- asreml(fixed = equation_fixed ,
+               random = equation_rand,  
+               residual = ~ units,   
+               data = data_MET_tmp, 
+               na.action = list(x="include",y="include"), 
+               maxiter=100,
+               trace=F)
+  m5 <- update(m5)
+  m5 <- update(m5)
+  
+  # Genotype as Fixed + row_col + ar1
+  equation_fixed <-  reformulate(c("1", "trial", "accession"), response = var)
+  equation_rand <-  reformulate(c("trial:accession", "at(trial):col_f", "at(trial):row_f"))
+  
+  if(i >= 2) rm(m6)
+  m6 <- asreml(fixed = equation_fixed ,
+               random = equation_rand,  
+               residual = ~ units,   
+               data = data_MET_tmp, 
+               na.action = list(x="include",y="include"), 
+               maxiter=100,
+               trace=F)
+  m6 <- update(m6)
+  m6 <- update(m6)
+  
+  # BLUPs
+  pvalsBLUPs <- predict(m5, classify = "accession", pworkspace = "1gb")$pvals %>% select(-status) %>%  mutate(var = var)
+
+  # BLUEs
+  pvalsBLUEs <- predict(m6, classify = "accession", pworkspace = "1gb")$pvals %>% select(-status) %>%  mutate(var = var)
+  
+  # heritability
+   h2_fa[i] <- agriutilities::heritability_fa(
+    model_fa = m5,
+    genotype = "accession",
+    env = "trial",
+    vc.model = "fa1"
+  )$H2Cullis
+  names(h2_fa)[i] <- var
+  
+  # stacked table
+  
+  if(i == 1){
+    BLUPs_tables <- pvalsBLUPs
+    BLUEs_tables <- pvalsBLUEs
+    raw_tables <- raw_m
+    raw_tables_g <- raw_g
+  } else {
+    BLUPs_tables <- rbind.data.frame(BLUPs_tables, pvalsBLUPs)
+    BLUEs_tables <- rbind.data.frame(BLUEs_tables, pvalsBLUEs)
+    raw_tables <- rbind.data.frame(raw_tables, raw_m)
+    raw_tables_g <- rbind.data.frame(raw_tables_g, raw_g)
+  }
+  i <- i + 1
+  
+}
+```
+
+
 
 
 
