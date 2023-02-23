@@ -30,7 +30,7 @@ source("https://raw.githubusercontent.com/Cassava2050/PPD/main/utilities_tidy.R"
 local_file <- "yes" # "no"
 if (local_file == "yes") {
   folder <- "D:\\OneDrive - CGIAR\\Data Analysis\\HungLoc_2022\\data\\"
-  file <- "phenotype.csv"
+  file <- "phenotype1.csv"
   skip_col <- 3 # double check the number of col skipped
   trial_interest = "DMF1C"
   year_interest <- 2022
@@ -150,7 +150,12 @@ trial_standard_new <- trial_standard %>%
          # 2) calculate area per plant
          area_plant = (use_plot_length*use_plot_width)/obs_harvest_number_plan,
          # 3) calculate the yield_v4 obs_planted_number_plot
-         obs_yield_ha_v2 = (((obs_yield_ha*10000)/(area_plant*obs_planted_number_plot))/1000))
+         obs_yield_ha_v2 = (((obs_root_weight_plot*10000)/(area_plant*obs_harvest_number_plan))/1000))
+
+
+trial_standard_new %>% select(use_plot_name, use_plot_length, use_plot_width, obs_yield_ha, obs_yield_ha_v2)
+
+trial_standard$obs_planted_number_plot %>% unique
 ```
 
 
@@ -167,29 +172,16 @@ p1 <- trial_standard_new %>% ggplot() +
   theme_xiaofei()
 
 ggplotly(p1)
+detach("package:plotly", unload = TRUE)
 ```
 
 ## Fixing some issues
 
 ```{r}
-# rename the DM_gravity to starch content
-# pull out the plot_names with zero in starch content
-p <- 
-  trial_standard_new %>%
-  dplyr::rename("obs_starch_content" = obs_DM_gravity) %>% 
-  dplyr::filter(obs_starch_content == 0) %>% 
-  select(use_trial_name, use_plot_name, obs_starch_content) %>% 
-  pull(use_plot_name)
-
-# pull out the plot_names with values lower than 1 and larger than 5 in vigor
-v <- 
-  trial_standard_new %>% 
-  dplyr::filter(obs_vigor1_5 == 0 | obs_vigor1_5 > 5) %>% 
-  select(use_trial_name, use_plot_name, obs_vigor1_5) %>% 
-  pull(use_plot_name)
 
 # fixing the issues
 # coalesce branch_number with branch_number_9mon. Are the same variables.
+# obs_height, obs_height_wt_leaf. They are the same variables
 trial_standard_new <-
   trial_standard_new %>%
   mutate(
@@ -199,17 +191,7 @@ trial_standard_new <-
   mutate(obs_height =
            coalesce(obs_height, obs_height_wt_leaf)
   ) %>% 
-  select(-c("obs_branch_number_9mon", "obs_height_wt_leaf")) %>%
-  dplyr::rename("obs_starch_content" = obs_DM_gravity) %>% 
-  mutate(
-    obs_starch_content =
-      ifelse(use_plot_name %in% p, NA, obs_starch_content)
-  ) %>%
-  mutate(
-    obs_vigor1_5 =
-      ifelse(use_plot_name %in% v, NA, obs_vigor1_5)
-  )
-
+  select(-c("obs_branch_number_9mon", "obs_height_wt_leaf"))
 ```
 
 ## Calculate starch yield
