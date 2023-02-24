@@ -9,11 +9,10 @@ editor: visual
 
 # Introduction
 
-This is a document showing the data analysis of two trials in Vietman. The trials were managed by Hung Loc Agriculture Research Center. 
-The localities were:
+This is a document showing the data analysis of two trials in Vietman. The trials were managed by Hung Loc Agriculture Research Center. The localities were:
 
-- Dong Nai
-- Tay Ninh
+-   Dong Nai
+-   Tay Ninh
 
 ## Load the libraries
 
@@ -45,8 +44,6 @@ sel_data <- read_cassavabase(phenotypeFile = paste0(folder, file))
 # ---- Change columns into standar names ----
 sel_data_kp <- change_colname(sel_data, NA)
 ```
-
-
 
 ## change the column class
 
@@ -110,7 +107,6 @@ Some genotypes different to checks have more than one replicate.
 
 ## plot plant number
 
-
 ```{r}
 plants_plot <- trial_standard %>%
   group_by(use_trial_name) %>%
@@ -157,7 +153,6 @@ trial_standard_new %>% select(use_plot_name, use_plot_length, use_plot_width, ob
 
 trial_standard$obs_planted_number_plot %>% unique
 ```
-
 
 According to Phoung, the root yield data is the weight per plot, not the yield per hectare. Lizbeth needs to fix this error in cassava Base, first she needs makes the calculation of yield base on plant distance and the reload the correct values.
 
@@ -208,7 +203,7 @@ trial_standard_new <-
 is_numeric(trial_data = trial_standard_new)
 ```
 
-## Get the tidy data 
+## Get the tidy data
 
 ```{r}
 meta_info = names(trial_standard_new)[str_detect(names(trial_standard_new), "use_")]
@@ -225,7 +220,7 @@ names(trial_tidy)= gsub("obs_", "", names(trial_tidy))
 trial_tidy = trial_tidy[c(meta_info, trait_list)]
 ```
 
-# Boxplots 
+# Boxplots
 
 ```{r warning=FALSE}
 # remove columns with all NA
@@ -252,6 +247,7 @@ for (i in 1:length(trait_wanted)) {
   plot(plot_box)
 }
 ```
+
 ## Save the tidy data for analysis
 
 ```{r eval=FALSE}
@@ -267,7 +263,6 @@ write.csv(trial_tidy, here::here("output", paste("01_", year_interest, trial_int
 master_data <- list()
 ```
 
-
 ## Load the tidy data
 
 ```{r}
@@ -281,7 +276,7 @@ sel_file = list_file[str_detect(list_file, "_tidy_data4analysis_") &
                                   paste(year_interest, trial_interest, sep=""))]
 sel_file
 # the data we will use
-sel_file_use = sel_file[1]
+sel_file_use = sel_file[2]
 
 trial1_tidy = read.csv(here::here("output", sel_file_use), header=TRUE,
                         stringsAsFactors = FALSE,
@@ -333,7 +328,6 @@ print("All the traits investigated:")
 print(analysis_trait_v1)
 ```
 
-
 ## Select the meta information for analysis
 
 ```{r}
@@ -356,10 +350,9 @@ master_data[["mean_of_sd"]] = sd_mean[order(sd_mean$mean_of_sd),]
 ## Trait ideal
 
 ```{r}
-trait_ideal <- analysis_trait[-c(1, 10, 11, 12, 13, 16:19, 21:26)]
+trait_ideal <- analysis_trait[-c(8, 10:12, 15:21, 23:27)]
 print("the trait ideal is:"); trait_ideal
 ```
-
 
 ## Summary tables
 
@@ -420,12 +413,12 @@ ncols = length(unique(data_location$C))
 nrows = length(unique(data_location$R))
 ```
 
-
 ```{r warning=FALSE}
 gen = "accession_name"
 h2 <- c()
 i <- 1
-for (trait in trait_ideal[-c(11)]) {  #CMD1mon, germination_percent did nor fit for tani
+
+for (trait in trait_ideal[-c(12)]) {  #CMD1mon, germination_percent did nor fit for tani
   mo_spatial <- SpATS(
     response = trait,
     genotype = "accession_name",
@@ -467,6 +460,8 @@ for (trait in trait_ideal[-c(11)]) {  #CMD1mon, germination_percent did nor fit 
 }
 ```
 
+I need to learn how to extract the genotypic BLUEs from a nonreplicate trial with SPATS.
+
 ## Save the BLUPs
 
 ```{r}
@@ -488,23 +483,17 @@ colnames(h2) <- c("var", "h2")
 h2 <- h2 %>% arrange(desc(h2))
 # save the heritability
 master_data[[paste0("h2_", loca)]] <- h2
+```
 
-master_data$BLUPs_dona
-master_data$h2_dona
-```
-```{r}
-master_data$BLUPs_tani
-```
 
 # Multienviromental analysis
 
 ```{r}
-variables <- trait_ideal[-c(11, 12)]
+variables <- trait_ideal[-12]
 h2_fa <- c()
 data_MET <- my_dat
 
 ```
-
 
 ```{r}
 # Loop for all the traits
@@ -606,8 +595,8 @@ for (var in variables) {
     model_fa = m5,
     genotype = "accession",
     env = "trial",
-    vc.model = "fa1"
-  )$H2Cullis
+    vc_model = "fa1"
+  )
   names(h2_fa)[i] <- var
   
   # stacked table
@@ -630,12 +619,31 @@ for (var in variables) {
 
 ```
 
+## Save both heritabilities
 
+```{r}
+h2_fa <- h2_fa %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(), names_to = "trait", values_to = "h2") %>% 
+  arrange(desc(h2))
+  
+# save the heritability
+master_data[[paste0("h2_", "gxe")]] <- h2_fa
+```
 
+## Save the gxe BLUPs
 
+```{r}
+BLUPs_table <- BLUPs_tables %>% 
+  select(-std.error) %>% 
+  group_by(var, accession) %>%
+  spread(var, value = predicted.value) %>%
+  ungroup() 
+#save the BLUPs data
+master_data[[paste0("BLUPs_", "gxe")]] <- BLUPs_table
+```
 
-
-
+## Save the BLUEs or raw data across the trials
 
 
 
