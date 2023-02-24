@@ -638,12 +638,154 @@ BLUPs_table <- BLUPs_tables %>%
   select(-std.error) %>% 
   group_by(var, accession) %>%
   spread(var, value = predicted.value) %>%
-  ungroup() 
+  ungroup() %>% 
+  rename("accession_name" = accession)
 #save the BLUPs data
 master_data[[paste0("BLUPs_", "gxe")]] <- BLUPs_table
 ```
 
 ## Save the BLUEs or raw data across the trials
+
+```{r}
+
+for (var in variables) {
+  #var = "branch_number"
+  blue_blup <- my_dat %>% 
+    select(trial_name, accession_name, .data[[var]]) %>% 
+     group_by(trial_name, accession_name) %>% 
+     summarize_at(vars(var), mean, na.rm = T) %>% 
+    pivot_wider(names_from = trial_name, values_from = .data[[var]]) %>%
+    right_join(BLUPs_table %>%
+    select(accession_name, matches(var)), by = "accession_name")
+  # remove all NA columns
+  blue_blup <- blue_blup[, colSums(is.na(blue_blup)) < nrow(blue_blup)]
+  master_data[[paste0("BLUP_BLUE_", var)]] <- blue_blup
+}
+```
+
+## Save the master data results
+
+```{r}
+folder_output <- here::here("output//")
+
+meta_file_name <- paste0(folder_output, paste0("HungLoc_", trial_interest, "_master_results_", Sys.Date(), "_.xlsx" ))
+
+write.xlsx(master_data, file = meta_file_name)
+```
+
+## Index selection
+
+```{r}
+list_file <- list.files(folder_output)
+sel_file <- list_file[str_detect(list_file, "_master_results_") &
+  str_detect(list_file, trial_interest)]
+sel_file[1]
+blupDF_kp <- read_excel(
+  paste(folder_output,
+    sel_file[1],
+    sep = ""
+  ),
+  sheet = paste0("BLUPs_", "gxe")
+)
+```
+
+## Selection index
+
+```{r}
+colnames(blupDF_kp)
+index_col <- colnames(blupDF_kp)[c(2, 11, 13)] 
+
+index_dat <- blupDF_kp %>%
+  select("accession_name", all_of(index_col)) %>%
+  column_to_rownames("accession_name")
+```
+
+
+## Johan's function
+
+```{r}
+# multi-trait -------------------------------------------------------------
+library(explor)
+library(FactoMineR)
+library(factoextra)
+library(cowplot)
+library(ggpubr)
+pca_index <- function(data, id, variables = NULL, percentage = 0.20, b) {
+  # The data set to be analyzed. It should be in the form of a data frame.
+  data <- as.data.frame(data)
+  rownames(data) <- data[, id]
+  if (is.null(variables)) variables <- names(data)[names(data) != id]
+  data <- data[, variables]
+  index <- selIndex(Y = as.matrix(data), b = b, scale = T)
+  index <- c(index)
+  data$index <- index
+  data <- data %>% arrange(desc(index))
+  data$selected <- NA
+  data$selected[1:(round(percentage * nrow(data)))] <- TRUE
+  data$selected <- ifelse(is.na(data$selected), FALSE, data$selected)
+  res.pca <- PCA(data, graph = T, scale.unit = T, quali.sup = ncol(data))
+  p1 <- fviz_pca_var(res.pca, col.var = "black", repel = T) +
+  theme_xiaofei()
+  p2 <- fviz_pca_ind(res.pca,
+    label = "none", habillage = data$selected,
+    palette = c("#00AFBB", "#FC4E07"), addEllipses = T
+  ) +
+  theme_xiaofei()
+  # labs(title =  paste("Selection:",
+  #                     paste0(percentage*100,"%")),
+  #      subtitle = paste("Weights:", "(", paste0(b, collapse = ', '),")"  ))
+  final <- ggdraw() +
+  draw_plot(p1, x = 0, y = 0, width = .5, height = 1) +
+  draw_plot(p2, x = .5, y = 0.2, width = .5, height = 0.6) +
+  draw_plot_label(
+    label = c("A", "B"), size = 15,
+    x = c(0, 0.5), y = c(1, 1)
+  )
+  
+  # final <- ggarrange(p1, p2, legend = "bottom", common.legend = T)
+  # final <- annotate_figure(final,
+  #   top = text_grob(paste(
+  #     "Selection:",
+  #     paste0(percentage * 100, "%"), "\n",
+  #     paste("Weights:", "(", paste0(b, collapse = ", "), ")", "\n")
+  #   ), color = "black", face = "bold", size = 14)
+  # )
+  selection <- data %>% filter(selected == T)
+  return(list(res.pca = res.pca, final = final, results = data, selection = selection))
+}
+selIndex <- function (Y, b, scale = FALSE) 
+{
+    if (scale) {
+        return(scale(Y) %*% b)
+    }
+    return(Y %*% b)
+}
+```
+
+## Index selection
+
+```{r}
+TestIndex_ <- index_dat %>%
+  rownames_to_column("accession_name") %>%
+  drop_na()
+
+res.pca <- pca_index(data = TestIndex_, id = "accession_name", b = c(-5, 10, 10), percentage = 0.20)
+res.pca_final <- res.pca$final
+res.pca_final
+ggsave(paste("images/selection",  trial_interest, Sys.Date(), ".png"), plot = res.pca_final, units = "in", dpi = 300, width = 10, height = 10)
+res.pca$selection
+selections <- res.pca$results %>% rownames_to_column(var = "accession_name") 
+```
+
+## Save the selections
+
+```{r}
+write.csv(selections, here::here("output", paste("01_", year_interest, trial_interest,
+  "_selection_", Sys.Date(), ".csv", sep = "")), row.names = FALSE)
+```
+
+
+
 
 
 
