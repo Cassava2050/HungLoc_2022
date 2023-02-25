@@ -485,7 +485,6 @@ h2 <- h2 %>% arrange(desc(h2))
 master_data[[paste0("h2_", loca)]] <- h2
 ```
 
-
 # Multienviromental analysis
 
 ```{r}
@@ -700,7 +699,6 @@ index_dat <- blupDF_kp %>%
   column_to_rownames("accession_name")
 ```
 
-
 ## Johan's function
 
 ```{r}
@@ -783,9 +781,3 @@ selections <- res.pca$results %>% rownames_to_column(var = "accession_name")
 write.csv(selections, here::here("output", paste("01_", year_interest, trial_interest,
   "_selection_", Sys.Date(), ".csv", sep = "")), row.names = FALSE)
 ```
-
-
-
-
-
-
