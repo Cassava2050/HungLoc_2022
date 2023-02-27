@@ -9,10 +9,11 @@ editor: visual
 
 # Introduction
 
-This is a document showing the data analysis of two trials in Vietman. The trials were managed by Hung Loc Agriculture Research Center. The localities were:
+This is a document showing the data analysis of two trials in Vietman. The trials were managed by Hung Loc Agriculture Research Center. 
+The localities were:
 
--   Dong Nai
--   Tay Ninh
+- Dong Nai
+- Tay Ninh
 
 ## Load the libraries
 
@@ -31,7 +32,7 @@ if (local_file == "yes") {
   folder <- "D:\\OneDrive - CGIAR\\Data Analysis\\HungLoc_2022\\data\\"
   file <- "phenotype1.csv"
   skip_col <- 3 # double check the number of col skipped
-  trial_interest = "DMF1C"s
+  trial_interest = "DMF1C"
   year_interest <- 2022
 }
 # 1) load the data
@@ -44,6 +45,8 @@ sel_data <- read_cassavabase(phenotypeFile = paste0(folder, file))
 # ---- Change columns into standar names ----
 sel_data_kp <- change_colname(sel_data, NA)
 ```
+
+
 
 ## change the column class
 
@@ -107,6 +110,7 @@ Some genotypes different to checks have more than one replicate.
 
 ## plot plant number
 
+
 ```{r}
 plants_plot <- trial_standard %>%
   group_by(use_trial_name) %>%
@@ -147,14 +151,8 @@ trial_standard_new <- trial_standard %>%
          area_plant = (use_plot_length*use_plot_width)/obs_harvest_number_plan,
          # 3) calculate the yield_v4 obs_planted_number_plot
          obs_yield_ha_v2 = (((obs_root_weight_plot*10000)/(area_plant*obs_harvest_number_plan))/1000))
-
-
-trial_standard_new %>% select(use_plot_name, use_plot_length, use_plot_width, obs_yield_ha, obs_yield_ha_v2)
-
-trial_standard$obs_planted_number_plot %>% unique
 ```
 
-According to Phoung, the root yield data is the weight per plot, not the yield per hectare. Lizbeth needs to fix this error in cassava Base, first she needs makes the calculation of yield base on plant distance and the reload the correct values.
 
 ## Plot the yield_v2 vs yiel upload by Lizbeth
 
@@ -173,7 +171,6 @@ detach("package:plotly", unload = TRUE)
 ## Fixing some issues
 
 ```{r}
-
 # fixing the issues
 # coalesce branch_number with branch_number_9mon. Are the same variables.
 # obs_height, obs_height_wt_leaf. They are the same variables
@@ -203,7 +200,7 @@ trial_standard_new <-
 is_numeric(trial_data = trial_standard_new)
 ```
 
-## Get the tidy data
+## Get the tidy data 
 
 ```{r}
 meta_info = names(trial_standard_new)[str_detect(names(trial_standard_new), "use_")]
@@ -220,7 +217,7 @@ names(trial_tidy)= gsub("obs_", "", names(trial_tidy))
 trial_tidy = trial_tidy[c(meta_info, trait_list)]
 ```
 
-# Boxplots
+# Boxplots 
 
 ```{r warning=FALSE}
 # remove columns with all NA
@@ -248,6 +245,51 @@ for (i in 1:length(trait_wanted)) {
 }
 ```
 
+## Grouping boxplot
+
+```{r}
+plot_bxp <- trial_tidy %>%
+  pivot_longer(
+    cols = all_of(trait_wanted),
+    names_to = "var",
+    values_to = "values"
+  ) %>%
+  filter(!var %in% c(
+    "harvest_number",
+    "harvest_number_plan",
+    "germinated_number_plot",
+    "mites_3mon",
+    "planted_number_plot"
+  )) %>%
+  ggplot(aes(x = trial_name, y = values)) +
+  geom_violin(trim = FALSE, fill = "gray") +
+  geom_boxplot(width = 0.2, trim = FALSE) +
+  labs(x = NULL, y = NULL, title = "") +
+  theme_xiaofei() +
+  theme(
+    axis.text.x = element_text(size = 8, vjust = 1),
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(color = "black"),
+    
+  ) +
+  facet_wrap(~var,
+    ncol = 4, scales = "free_y"
+    #labeller = as_labeller(fct_labels)
+  ) +
+  theme(
+    strip.text.x = element_text(
+      size = 12, face = "bold.italic"
+    )
+  )
+
+plot_bxp
+
+# ggsave(paste0("images\\boxplot_", trial_interest, Sys.Date(), ".png"),
+#     plot = plot_bxp, units = "in", dpi = 300, width = 12, height = 10
+#   )
+```
+
+
 ## Save the tidy data for analysis
 
 ```{r eval=FALSE}
@@ -262,6 +304,7 @@ write.csv(trial_tidy, here::here("output", paste("01_", year_interest, trial_int
 ```{r}
 master_data <- list()
 ```
+
 
 ## Load the tidy data
 
@@ -328,6 +371,7 @@ print("All the traits investigated:")
 print(analysis_trait_v1)
 ```
 
+
 ## Select the meta information for analysis
 
 ```{r}
@@ -353,6 +397,7 @@ master_data[["mean_of_sd"]] = sd_mean[order(sd_mean$mean_of_sd),]
 trait_ideal <- analysis_trait[-c(8, 10:12, 15:21, 23:27)]
 print("the trait ideal is:"); trait_ideal
 ```
+
 
 ## Summary tables
 
@@ -389,6 +434,8 @@ for (var in trait_ideal) {
 }
 ```
 
+
+
 # Modeling single trial
 
 ## Spatial Model
@@ -404,8 +451,8 @@ my_dat$C <- as.factor(my_dat$col_number)
 ## Set location experiment
 
 ```{r}
-#loca <- "dona" # -------select one
-loca <- "tani"
+loca <- "dona" # -------select one
+#loca <- "tani"
 # ---------------------------------------------------
 data_location <- my_dat %>% filter(str_ends(trial_name, loca)) #"tani"
 # n segments
@@ -413,16 +460,19 @@ ncols = length(unique(data_location$C))
 nrows = length(unique(data_location$R))
 ```
 
+
 ```{r warning=FALSE}
 gen = "accession_name"
 h2 <- c()
 i <- 1
 
-for (trait in trait_ideal[-c(12)]) {  #CMD1mon, germination_percent did nor fit for tani
+trait = "branch_number"
+
+for (trait in trait_ideal) {  #CMD1mon, germination_percent did nor fit for tani
   mo_spatial <- SpATS(
     response = trait,
     genotype = "accession_name",
-    genotype.as.random = T,
+    genotype.as.random = F,
     fixed = NULL,
     spatial = ~ PSANOVA(col_number,
       row_number,
@@ -434,6 +484,8 @@ for (trait in trait_ideal[-c(12)]) {  #CMD1mon, germination_percent did nor fit 
     data = data_location,
     control = list(tolerance = 1e-03, monitoring = 1)
   )
+  
+  
   plot(mo_spatial)
   var.m0 <- variogram(mo_spatial)
   plot(var.m0)
@@ -449,8 +501,9 @@ for (trait in trait_ideal[-c(12)]) {  #CMD1mon, germination_percent did nor fit 
     filter(accession_name %in% data_location$accession_name) %>%
     select(-coeff)
 
-    h2[i] <- getHeritability(mo_spatial)
-  names(h2)[i] <- trait
+  #   h2[i] <- getHeritability(mo_spatial)
+  # names(h2)[i] <- trait
+  
   if (i == 1) {
     pvals_table <- g.SpATS
   } else {
@@ -459,8 +512,6 @@ for (trait in trait_ideal[-c(12)]) {  #CMD1mon, germination_percent did nor fit 
   i <- i + 1
 }
 ```
-
-I need to learn how to extract the genotypic BLUEs from a nonreplicate trial with SPATS.
 
 ## Save the BLUPs
 
@@ -483,16 +534,23 @@ colnames(h2) <- c("var", "h2")
 h2 <- h2 %>% arrange(desc(h2))
 # save the heritability
 master_data[[paste0("h2_", loca)]] <- h2
+
+master_data$BLUPs_dona
+master_data$h2_dona
+```
+```{r}
+master_data$BLUPs_tani
 ```
 
 # Multienviromental analysis
 
 ```{r}
-variables <- trait_ideal[-12]
+variables <- trait_ideal[-c(11, 12)]
 h2_fa <- c()
 data_MET <- my_dat
 
 ```
+
 
 ```{r}
 # Loop for all the traits
@@ -594,8 +652,8 @@ for (var in variables) {
     model_fa = m5,
     genotype = "accession",
     env = "trial",
-    vc_model = "fa1"
-  )
+    vc.model = "fa1"
+  )$H2Cullis
   names(h2_fa)[i] <- var
   
   # stacked table
@@ -618,166 +676,12 @@ for (var in variables) {
 
 ```
 
-## Save both heritabilities
 
-```{r}
-h2_fa <- h2_fa %>%
-  as.data.frame() %>%
-  pivot_longer(cols = everything(), names_to = "trait", values_to = "h2") %>% 
-  arrange(desc(h2))
-  
-# save the heritability
-master_data[[paste0("h2_", "gxe")]] <- h2_fa
-```
 
-## Save the gxe BLUPs
 
-```{r}
-BLUPs_table <- BLUPs_tables %>% 
-  select(-std.error) %>% 
-  group_by(var, accession) %>%
-  spread(var, value = predicted.value) %>%
-  ungroup() %>% 
-  rename("accession_name" = accession)
-#save the BLUPs data
-master_data[[paste0("BLUPs_", "gxe")]] <- BLUPs_table
-```
 
-## Save the BLUEs or raw data across the trials
 
-```{r}
 
-for (var in variables) {
-  #var = "branch_number"
-  blue_blup <- my_dat %>% 
-    select(trial_name, accession_name, .data[[var]]) %>% 
-     group_by(trial_name, accession_name) %>% 
-     summarize_at(vars(var), mean, na.rm = T) %>% 
-    pivot_wider(names_from = trial_name, values_from = .data[[var]]) %>%
-    right_join(BLUPs_table %>%
-    select(accession_name, matches(var)), by = "accession_name")
-  # remove all NA columns
-  blue_blup <- blue_blup[, colSums(is.na(blue_blup)) < nrow(blue_blup)]
-  master_data[[paste0("BLUP_BLUE_", var)]] <- blue_blup
-}
-```
 
-## Save the master data results
 
-```{r}
-folder_output <- here::here("output//")
 
-meta_file_name <- paste0(folder_output, paste0("HungLoc_", trial_interest, "_master_results_", Sys.Date(), "_.xlsx" ))
-
-write.xlsx(master_data, file = meta_file_name)
-```
-
-## Index selection
-
-```{r}
-list_file <- list.files(folder_output)
-sel_file <- list_file[str_detect(list_file, "_master_results_") &
-  str_detect(list_file, trial_interest)]
-sel_file[1]
-blupDF_kp <- read_excel(
-  paste(folder_output,
-    sel_file[1],
-    sep = ""
-  ),
-  sheet = paste0("BLUPs_", "gxe")
-)
-```
-
-## Selection index
-
-```{r}
-colnames(blupDF_kp)
-index_col <- colnames(blupDF_kp)[c(2, 11, 13)] 
-
-index_dat <- blupDF_kp %>%
-  select("accession_name", all_of(index_col)) %>%
-  column_to_rownames("accession_name")
-```
-
-## Johan's function
-
-```{r}
-# multi-trait -------------------------------------------------------------
-library(explor)
-library(FactoMineR)
-library(factoextra)
-library(cowplot)
-library(ggpubr)
-pca_index <- function(data, id, variables = NULL, percentage = 0.20, b) {
-  # The data set to be analyzed. It should be in the form of a data frame.
-  data <- as.data.frame(data)
-  rownames(data) <- data[, id]
-  if (is.null(variables)) variables <- names(data)[names(data) != id]
-  data <- data[, variables]
-  index <- selIndex(Y = as.matrix(data), b = b, scale = T)
-  index <- c(index)
-  data$index <- index
-  data <- data %>% arrange(desc(index))
-  data$selected <- NA
-  data$selected[1:(round(percentage * nrow(data)))] <- TRUE
-  data$selected <- ifelse(is.na(data$selected), FALSE, data$selected)
-  res.pca <- PCA(data, graph = T, scale.unit = T, quali.sup = ncol(data))
-  p1 <- fviz_pca_var(res.pca, col.var = "black", repel = T) +
-  theme_xiaofei()
-  p2 <- fviz_pca_ind(res.pca,
-    label = "none", habillage = data$selected,
-    palette = c("#00AFBB", "#FC4E07"), addEllipses = T
-  ) +
-  theme_xiaofei()
-  # labs(title =  paste("Selection:",
-  #                     paste0(percentage*100,"%")),
-  #      subtitle = paste("Weights:", "(", paste0(b, collapse = ', '),")"  ))
-  final <- ggdraw() +
-  draw_plot(p1, x = 0, y = 0, width = .5, height = 1) +
-  draw_plot(p2, x = .5, y = 0.2, width = .5, height = 0.6) +
-  draw_plot_label(
-    label = c("A", "B"), size = 15,
-    x = c(0, 0.5), y = c(1, 1)
-  )
-  
-  # final <- ggarrange(p1, p2, legend = "bottom", common.legend = T)
-  # final <- annotate_figure(final,
-  #   top = text_grob(paste(
-  #     "Selection:",
-  #     paste0(percentage * 100, "%"), "\n",
-  #     paste("Weights:", "(", paste0(b, collapse = ", "), ")", "\n")
-  #   ), color = "black", face = "bold", size = 14)
-  # )
-  selection <- data %>% filter(selected == T)
-  return(list(res.pca = res.pca, final = final, results = data, selection = selection))
-}
-selIndex <- function (Y, b, scale = FALSE) 
-{
-    if (scale) {
-        return(scale(Y) %*% b)
-    }
-    return(Y %*% b)
-}
-```
-
-## Index selection
-
-```{r}
-TestIndex_ <- index_dat %>%
-  rownames_to_column("accession_name") %>%
-  drop_na()
-
-res.pca <- pca_index(data = TestIndex_, id = "accession_name", b = c(-5, 10, 10), percentage = 0.20)
-res.pca_final <- res.pca$final
-res.pca_final
-ggsave(paste("images/selection",  trial_interest, Sys.Date(), ".png"), plot = res.pca_final, units = "in", dpi = 300, width = 10, height = 10)
-res.pca$selection
-selections <- res.pca$results %>% rownames_to_column(var = "accession_name") 
-```
-
-## Save the selections
-
-```{r}
-write.csv(selections, here::here("output", paste("01_", year_interest, trial_interest,
-  "_selection_", Sys.Date(), ".csv", sep = "")), row.names = FALSE)
-```
