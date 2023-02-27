@@ -31,7 +31,7 @@ if (local_file == "yes") {
   folder <- "D:\\OneDrive - CGIAR\\Data Analysis\\HungLoc_2022\\data\\"
   file <- "phenotype1.csv"
   skip_col <- 3 # double check the number of col skipped
-  trial_interest = "DMF1C"
+  trial_interest = "DMF1C"s
   year_interest <- 2022
 }
 # 1) load the data
