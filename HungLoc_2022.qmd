@@ -466,13 +466,19 @@ gen = "accession_name"
 h2 <- c()
 i <- 1
 
-trait = "branch_number"
+genotype_as_fixed = TRUE #----select one
+#genotype_as_fixed = FALSE
 
-for (trait in trait_ideal) {  #CMD1mon, germination_percent did nor fit for tani
+for (trait in trait_ideal[-3]) {  #CMD1mon, germination_percent did nor fit for tani
+  
+  cat("\n_______________")
+  cat("\nVARIABLE:", trait, "\n")
+  cat("_______________\n")
+  
   mo_spatial <- SpATS(
     response = trait,
     genotype = "accession_name",
-    genotype.as.random = F,
+    genotype.as.random = TRUE,     #TRUE ---select one 
     fixed = NULL,
     spatial = ~ PSANOVA(col_number,
       row_number,
@@ -490,6 +496,9 @@ for (trait in trait_ideal) {  #CMD1mon, germination_percent did nor fit for tani
   var.m0 <- variogram(mo_spatial)
   plot(var.m0)
   ng <- length(mo_spatial$terms$geno$geno_names)
+  
+  ## BLUPs
+if(genotype_as_fixed == F) {
   g.SpATS <-
     mo_spatial$coeff[1:ng] %>%
     data.frame(coeff = .) %>%
@@ -501,14 +510,25 @@ for (trait in trait_ideal) {  #CMD1mon, germination_percent did nor fit for tani
     filter(accession_name %in% data_location$accession_name) %>%
     select(-coeff)
 
-  #   h2[i] <- getHeritability(mo_spatial)
-  # names(h2)[i] <- trait
+   h2[i] <- getHeritability(mo_spatial)
+   names(h2)[i] <- trait
+}
+  
+  ## BLUEs
+if (genotype_as_fixed == T) {
+ g.SpATS <- predict(mo_spatial, which = "accession_name") %>% 
+    mutate(
+      variable = trait) %>% 
+    select(accession_name, predicted.values, variable)
+}
+  
   
   if (i == 1) {
     pvals_table <- g.SpATS
   } else {
     pvals_table <- rbind.data.frame(pvals_table, g.SpATS)
   }
+ 
   i <- i + 1
 }
 ```
@@ -516,39 +536,87 @@ for (trait in trait_ideal) {  #CMD1mon, germination_percent did nor fit for tani
 ## Save the BLUPs
 
 ```{r}
+if(genotype_as_fixed == F) { 
 pvals_table <- pvals_table %>%
   group_by(variable, accession_name) %>%
   spread(variable, value = BLUP) %>%
-  ungroup() 
+  add_column(trial_name = unique(data_location$trial_name)) %>% 
+  relocate(trial_name, .after = accession_name) %>% 
+  ungroup()
+  
+assign(paste0("pvals_", loca), pvals_table) #pvals_dona #pvals_tani
+}
+
+#bind_pvals both locations
+
+pvals_table <- pvals_dona %>%
+  bind_rows(pvals_tani) %>% arrange(accession_name)
+
 #save the BLUPs data
-master_data[[paste0("BLUPs_", loca)]] <- pvals_table
+master_data[[paste0("BLUPs_", "single")]] <- pvals_table
 ```
 
-## Save the heritabilities for both locations
+## Save the heritabilities for single locations
 
 ```{r}
+if(genotype_as_fixed == F) { 
 h2 <- h2 %>%
   as.data.frame() %>%
   tibble::rownames_to_column("trait")
 colnames(h2) <- c("var", "h2")
-h2 <- h2 %>% arrange(desc(h2))
-# save the heritability
-master_data[[paste0("h2_", loca)]] <- h2
 
-master_data$BLUPs_dona
-master_data$h2_dona
+h2 <- h2 %>% arrange(desc(h2)) %>% 
+  add_column(trial_name = unique(data_location$trial_name)) %>% 
+  relocate(trial_name, .after = var)
+
+assign(paste0("heritability_", loca), h2)
+
+}
+
+#bind heritabilities both locations
+h2 <- heritability_dona %>%
+  bind_rows(heritability_tani) %>% arrange(var)
+
+# save the heritability
+master_data[[paste0("h2_", "single")]] <- h2
+
 ```
+
+
+After running model with genotype as random effect, is necessary run it again, with genotype as fixed term. 
+
+## Save the BLUEs
+
 ```{r}
-master_data$BLUPs_tani
+if(genotype_as_fixed == T) { 
+  
+pvals_table <- pvals_table %>%
+  group_by(variable, accession_name) %>%
+  spread(variable, value = predicted.values) %>%
+  add_column(trial_name = unique(data_location$trial_name)) %>% 
+  relocate(trial_name, .after = accession_name) %>% 
+  ungroup() 
+
+assign(paste0("pvals_blues_", loca), pvals_table)
+}
+
+#bind_pvals both locations
+
+pvals_table <- pvals_blues_dona %>%
+  bind_rows(pvals_blues_tani) %>% arrange(accession_name)
+
+
+#save the BLUPs data
+master_data[[paste0("BLUEs_", "single")]] <- pvals_table
+
 ```
 
 # Multienviromental analysis
 
 ```{r}
-variables <- trait_ideal[-c(11, 12)]
+variables <- trait_ideal[-c(12, 13)]
 h2_fa <- c()
 data_MET <- my_dat
-
 ```
 
 
@@ -652,8 +720,8 @@ for (var in variables) {
     model_fa = m5,
     genotype = "accession",
     env = "trial",
-    vc.model = "fa1"
-  )$H2Cullis
+    vc_model = "fa1"
+  )
   names(h2_fa)[i] <- var
   
   # stacked table
